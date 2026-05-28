@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wazuh Event Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+  header { background: #1a1d27; border-bottom: 1px solid #2d3148; padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 18px; font-weight: 600; color: #fff; }
+  .badge-live { background: #22c55e; color: #000; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; letter-spacing: .5px; }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 20px 24px; }
+
+  /* STAT CARDS */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px; padding: 16px 20px; }
+  .card .num { font-size: 32px; font-weight: 700; line-height: 1; }
+  .card .lbl { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+  .card.critical .num { color: #f87171; }
+  .card.warning  .num { color: #fbbf24; }
+  .card.info     .num { color: #60a5fa; }
+  .card.success  .num { color: #34d399; }
+
+  /* BRUTE FORCE BANNER */
+  #brute-section { display: none; margin-bottom: 16px; }
+  .brute-banner { background: #3b1515; border: 1px solid #f87171; border-radius: 8px; padding: 12px 16px; }
+  .brute-banner h3 { color: #f87171; font-size: 13px; margin-bottom: 8px; }
+  .brute-item { font-size: 12px; color: #fca5a5; padding: 2px 0; }
+
+  /* FILTERS */
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: center; }
+  .filters select, .filters input { background: #1a1d27; border: 1px solid #2d3148; color: #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+  .filters button { background: #3b82f6; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .filters button:hover { background: #2563eb; }
+  #last-update { margin-left: auto; font-size: 11px; color: #64748b; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #2d3148; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { background: #1a1d27; padding: 10px 12px; text-align: left; color: #94a3b8; font-weight: 500; border-bottom: 1px solid #2d3148; white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid #1e2130; cursor: pointer; transition: background .1s; }
+  tbody tr:hover { background: #1e2130; }
+  tbody td { padding: 9px 12px; vertical-align: middle; }
+  tbody tr:last-child { border-bottom: none; }
+
+  /* SEVERITY PILLS */
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill.critical { background: #3b1515; color: #f87171; border: 1px solid #f87171; }
+  .pill.warning  { background: #3b2d0a; color: #fbbf24; border: 1px solid #fbbf24; }
+  .pill.info     { background: #0f2040; color: #60a5fa; border: 1px solid #60a5fa; }
+
+  /* ROW color hint */
+  tr.row-critical { border-left: 3px solid #f87171; }
+  tr.row-warning  { border-left: 3px solid #fbbf24; }
+  tr.row-info     { border-left: 3px solid #334155; }
+
+  /* MODAL */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; width: 90%; max-width: 680px; max-height: 80vh; overflow-y: auto; padding: 24px; }
+  .modal h2 { font-size: 15px; margin-bottom: 16px; color: #fff; }
+  .modal pre { background: #0f1117; border-radius: 6px; padding: 12px; font-size: 11px; overflow-x: auto; color: #94a3b8; white-space: pre-wrap; }
+  .modal-close { float: right; background: none; border: none; color: #94a3b8; font-size: 18px; cursor: pointer; }
+  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 12px; margin-bottom: 16px; font-size: 13px; }
+  .kv .k { color: #64748b; }
+  .kv .v { color: #e2e8f0; word-break: break-all; }
+
+  /* EMPTY */
+  .empty { text-align: center; padding: 40px; color: #475569; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Wazuh Event Dashboard</h1>
+  <span class="badge-live">CANLI</span>
+</header>
+
+<div class="container">
+
+  <!-- STAT CARDS -->
+  <div class="cards">
+    <div class="card info">
+      <div class="num" id="stat-total">-</div>
+      <div class="lbl">Bugün Toplam Event</div>
+    </div>
+    <div class="card warning">
+      <div class="num" id="stat-fail">-</div>
+      <div class="lbl">Başarısız Giriş</div>
+    </div>
+    <div class="card critical">
+      <div class="num" id="stat-locked">-</div>
+      <div class="lbl">Kilitlenen Hesap</div>
+    </div>
+    <div class="card critical">
+      <div class="num" id="stat-critical">-</div>
+      <div class="lbl">Kritik Event</div>
+    </div>
+  </div>
+
+  <!-- BRUTE FORCE -->
+  <div id="brute-section">
+    <div class="brute-banner">
+      <h3>⚠ Brute Force Şüphesi Tespit Edildi</h3>
+      <div id="brute-list"></div>
+    </div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filters">
+    <select id="f-hours">
+      <option value="1">Son 1 Saat</option>
+      <option value="6">Son 6 Saat</option>
+      <option value="24" selected>Son 24 Saat</option>
+      <option value="72">Son 3 Gün</option>
+      <option value="168">Son 1 Hafta</option>
+    </select>
+    <select id="f-severity">
+      <option value="">Tüm Seviyeler</option>
+      <option value="critical">Kritik</option>
+      <option value="warning">Uyarı</option>
+      <option value="info">Bilgi</option>
+    </select>
+    <select id="f-server"><option value="">Tüm Sunucular</option></select>
+    <select id="f-category">
+      <option value="">Tüm Kategoriler</option>
+      <option value="login_success">Başarılı Giriş</option>
+      <option value="login_fail">Başarısız Giriş</option>
+      <option value="account_locked">Hesap Kilidi</option>
+      <option value="account_created">Hesap Oluşturma</option>
+      <option value="account_deleted">Hesap Silme</option>
+      <option value="admin_login">Yönetici Girişi</option>
+      <option value="group_change">Grup Değişikliği</option>
+      <option value="new_service">Yeni Servis</option>
+      <option value="scheduled_task">Scheduled Task</option>
+    </select>
+    <button onclick="loadAll()">Filtrele</button>
+    <span id="last-update"></span>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Zaman</th>
+          <th>Sunucu</th>
+          <th>Event ID</th>
+          <th>Olay</th>
+          <th>Kullanıcı</th>
+          <th>Kaynak IP</th>
+          <th>Seviye</th>
+        </tr>
+      </thead>
+      <tbody id="event-tbody">
+        <tr><td colspan="7" class="empty">Yükleniyor...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Event Detayı</h2>
+    <div class="kv" id="modal-kv"></div>
+    <details>
+      <summary style="cursor:pointer;font-size:12px;color:#64748b;margin-bottom:8px;">Ham Veri (JSON)</summary>
+      <pre id="modal-raw"></pre>
+    </details>
+  </div>
+</div>
+
+<script>
+const SEV_LABEL = { critical: "Kritik", warning: "Uyarı", info: "Bilgi" };
+
+function fmt(ts) {
+  if (!ts) return "-";
+  const d = new Date(ts.replace(" ", "T") + (ts.includes("+") ? "" : "Z"));
+  return d.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
+}
+
+async function loadStats() {
+  const data = await fetch("/api/stats").then(r => r.json());
+  document.getElementById("stat-total").textContent    = data.total_today;
+  document.getElementById("stat-fail").textContent     = data.failed_logins;
+  document.getElementById("stat-locked").textContent   = data.locked_accounts;
+  document.getElementById("stat-critical").textContent = data.critical_count;
+
+  const sel = document.getElementById("f-server");
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Tüm Sunucular</option>';
+  (data.servers || []).forEach(s => {
+    const o = document.createElement("option");
+    o.value = s; o.textContent = s;
+    if (s === cur) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+async function loadBrute() {
+  const data = await fetch("/api/brute_force").then(r => r.json());
+  const sec  = document.getElementById("brute-section");
+  const lst  = document.getElementById("brute-list");
+  if (data.length === 0) { sec.style.display = "none"; return; }
+  sec.style.display = "block";
+  lst.innerHTML = data.map(b =>
+    `<div class="brute-item">${b.attempt_count} deneme — IP: <b>${b.source_ip}</b> → Sunucu: <b>${b.server}</b> | Kullanıcılar: ${b.usernames || "-"} | Son: ${fmt(b.last_seen)}</div>`
+  ).join("");
+}
+
+async function loadEvents() {
+  const hours    = document.getElementById("f-hours").value;
+  const severity = document.getElementById("f-severity").value;
+  const server   = document.getElementById("f-server").value;
+  const category = document.getElementById("f-category").value;
+
+  const params = new URLSearchParams({ hours, severity, server, category, limit: 300 });
+  const data   = await fetch(`/api/events?${params}`).then(r => r.json());
+
+  const tbody = document.getElementById("event-tbody");
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Bu aralıkta event bulunamadı.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = data.map(e => `
+    <tr class="row-${e.severity}" onclick="showDetail(${e.id})">
+      <td>${fmt(e.timestamp)}</td>
+      <td>${e.server}</td>
+      <td><code>${e.event_id}</code></td>
+      <td>${e.label}</td>
+      <td>${e.username || "-"}</td>
+      <td>${e.source_ip || "-"}</td>
+      <td><span class="pill ${e.severity}">${SEV_LABEL[e.severity] || e.severity}</span></td>
+    </tr>
+  `).join("");
+
+  document.getElementById("last-update").textContent =
+    "Son güncelleme: " + new Date().toLocaleTimeString("tr-TR");
+}
+
+async function loadAll() {
+  await Promise.all([loadStats(), loadBrute(), loadEvents()]);
+}
+
+async function showDetail(id) {
+  const e = await fetch(`/api/event/${id}`).then(r => r.json());
+  const kv = document.getElementById("modal-kv");
+  const fields = [
+    ["Zaman",      fmt(e.timestamp)],
+    ["Sunucu",     e.server],
+    ["Event ID",   e.event_id],
+    ["Olay",       e.label],
+    ["Kategori",   e.category],
+    ["Seviye",     `<span class="pill ${e.severity}">${SEV_LABEL[e.severity]||e.severity}</span>`],
+    ["Kullanıcı",  e.username || "-"],
+    ["Kaynak IP",  e.source_ip || "-"],
+  ];
+  kv.innerHTML = fields.map(([k,v]) => `<span class="k">${k}</span><span class="v">${v}</span>`).join("");
+  try {
+    document.getElementById("modal-raw").textContent =
+      JSON.stringify(JSON.parse(e.raw_data), null, 2);
+  } catch { document.getElementById("modal-raw").textContent = e.raw_data || ""; }
+  document.getElementById("modal-bg").classList.add("open");
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById("modal-bg") || e.currentTarget.tagName === "BUTTON") {
+    document.getElementById("modal-bg").classList.remove("open");
+  }
+}
+
+// İlk yükleme + her 30 saniyede otomatik yenile
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>
