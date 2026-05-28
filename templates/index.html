@@ -11,6 +11,18 @@
   header { background: #1a1d27; border-bottom: 1px solid #2d3148; padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
   header h1 { font-size: 18px; font-weight: 600; color: #fff; }
   .badge-live { background: #22c55e; color: #000; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; letter-spacing: .5px; }
+  .btn-update { margin-left: auto; background: #1e293b; border: 1px solid #3b82f6; color: #60a5fa; padding: 6px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: background .15s; }
+  .btn-update:hover { background: #3b82f6; color: #fff; }
+  .btn-update:disabled { opacity: .5; cursor: not-allowed; }
+  .update-modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 200; align-items: center; justify-content: center; }
+  .update-modal-bg.open { display: flex; }
+  .update-modal { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; width: 90%; max-width: 600px; padding: 24px; }
+  .update-modal h2 { font-size: 15px; margin-bottom: 14px; color: #fff; }
+  .update-modal pre { background: #0f1117; border-radius: 6px; padding: 14px; font-size: 12px; color: #94a3b8; white-space: pre-wrap; max-height: 340px; overflow-y: auto; }
+  .update-modal .actions { margin-top: 14px; text-align: right; }
+  .update-modal .actions button { background: #334155; border: none; color: #e2e8f0; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .status-ok  { color: #34d399; font-weight: 600; }
+  .status-err { color: #f87171; font-weight: 600; }
 
   .container { max-width: 1400px; margin: 0 auto; padding: 20px 24px; }
 
@@ -77,7 +89,19 @@
 <header>
   <h1>Wazuh Event Dashboard</h1>
   <span class="badge-live">CANLI</span>
+  <button class="btn-update" id="btn-update" onclick="startUpdate()">Güncelle</button>
 </header>
+
+<!-- UPDATE MODAL -->
+<div class="update-modal-bg" id="update-modal-bg">
+  <div class="update-modal">
+    <h2 id="update-modal-title">Güncelleme yapılıyor...</h2>
+    <pre id="update-output">Lütfen bekleyin...</pre>
+    <div class="actions">
+      <button onclick="document.getElementById('update-modal-bg').classList.remove('open')">Kapat</button>
+    </div>
+  </div>
+</div>
 
 <div class="container">
 
@@ -272,6 +296,37 @@ async function showDetail(id) {
 function closeModal(e) {
   if (!e || e.target === document.getElementById("modal-bg") || e.currentTarget.tagName === "BUTTON") {
     document.getElementById("modal-bg").classList.remove("open");
+  }
+}
+
+async function startUpdate() {
+  const btn = document.getElementById("btn-update");
+  const bg  = document.getElementById("update-modal-bg");
+  const out = document.getElementById("update-output");
+  const ttl = document.getElementById("update-modal-title");
+
+  btn.disabled = true;
+  btn.textContent = "Güncelleniyor...";
+  ttl.textContent = "Güncelleme yapılıyor...";
+  out.textContent = "Lütfen bekleyin...";
+  bg.classList.add("open");
+
+  try {
+    const res  = await fetch("/api/update", { method: "POST" });
+    const data = await res.json();
+    out.textContent = data.output || "(çıktı yok)";
+    if (data.success) {
+      ttl.innerHTML = '<span class="status-ok">Güncelleme tamamlandı</span>';
+      setTimeout(loadAll, 1500);
+    } else {
+      ttl.innerHTML = '<span class="status-err">Güncelleme başarısız</span>';
+    }
+  } catch (e) {
+    out.textContent = "Bağlantı hatası: " + e.message;
+    ttl.innerHTML = '<span class="status-err">Hata</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Güncelle";
   }
 }
 

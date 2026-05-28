@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from flask import Flask, render_template, jsonify, request
 import sqlite3
+import subprocess
 from datetime import datetime
 
 app = Flask(__name__)
@@ -91,6 +92,21 @@ def get_top_users():
         ORDER BY event_count DESC
         LIMIT 10
     """, (f"-{hours} hours",)))
+
+@app.route("/api/update", methods=["POST"])
+def run_update():
+    try:
+        result = subprocess.run(
+            ["/opt/wazuh-dashboard/update.sh"],
+            capture_output=True, text=True, timeout=60
+        )
+        output = result.stdout + result.stderr
+        success = result.returncode == 0
+        return jsonify({"success": success, "output": output})
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "output": "Güncelleme zaman aşımına uğradı (60s)."})
+    except Exception as e:
+        return jsonify({"success": False, "output": str(e)})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=False)
